@@ -7,7 +7,7 @@
     "talos": "./cli/index.js"
   },
   "scripts": {
-    "test": "node --test test/talos.test.js",
+    "test": "node --test test/*.test.js",
     "start": "node server/index.js",
     "daemon": "node daemon/index.js",
     "web": "node web/server.js"

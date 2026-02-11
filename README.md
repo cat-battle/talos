@@ -4,88 +4,91 @@ Task queue daemon for GitHub Copilot CLI automation. Named after the bronze auto
 
 ## Features
 
-- 📋 **Kanban Web UI** — Visual task management
+- 📋 **Kanban Web UI** — Visual task management with real-time updates
 - 💻 **CLI Interface** — Add and manage tasks from the terminal
-- ⚡ **Daemon** — Polls queue and executes tasks via `copilot`
-- 📁 **File-based Storage** — Tasks are JSON files, easy to inspect/backup
+- ⚡ **Streaming Output** — Live Copilot responses via WebSocket
+- 🔐 **Interactive Permissions** — Approve/deny tool usage in real-time
+- 📝 **Task Templates** — Quick-start common task types
+- 🔄 **Dual Execution Modes** — ACP (streaming) or Prompt (simple) with auto-fallback
 
 ## Requirements
 
 - Node.js 18+
-- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) (the new agent-based CLI)
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
 - GitHub CLI authenticated: `gh auth login`
 
-### Installing Copilot CLI
+## Quick Start
 
 ```bash
-# Install via npm (recommended)
-npm install -g @githubnext/github-copilot-cli
-
-# Or via gh extension
-gh extension install github/gh-copilot
-```
-
-## Installation
-
-```bash
-# Clone the repo
 git clone https://github.com/cat-battle/talos.git
 cd talos
+npm start
+# Open http://localhost:3000
+```
 
-# No npm install needed - uses only Node.js built-ins
+## Architecture
 
-# Make CLI executable
-chmod +x cli/index.js
-ln -s $(pwd)/cli/index.js /usr/local/bin/talos
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Web Browser                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   Kanban     │  │   Output     │  │  Permission  │  │
+│  │   Board      │  │   Stream     │  │   Prompts    │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                           │
+                    WebSocket + HTTP
+                           │
+┌─────────────────────────────────────────────────────────┐
+│                   Talos Server                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  REST API    │  │  WebSocket   │  │   Executor   │  │
+│  │  /api/*      │  │  /ws         │  │  ACP/Prompt  │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                           │
+                    ACP Protocol / CLI
+                           │
+┌─────────────────────────────────────────────────────────┐
+│                 GitHub Copilot CLI                      │
+│             copilot --acp --stdio                       │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## Usage
 
-### Start the Services
-
-```bash
-# Start daemon (polls every 10 min by default)
-node daemon/index.js
-
-# Start web UI (runs on port 3000)
-node web/server.js
-
-# Or run both
-npm start
-```
-
 ### Web UI
 
-Open http://localhost:3000 for the kanban board:
-- Create tasks with title, prompt, and type
-- View task status and results
-- Requeue failed tasks
+1. Open http://localhost:3000
+2. Click **+ New Task** or use a template
+3. Click **▶ Run** on queued tasks
+4. Watch output stream in real-time
+5. Approve/deny permissions as needed
 
 ### CLI
 
 ```bash
-# Add a task
+# Link CLI globally (optional)
+chmod +x cli/index.js
+sudo ln -s $(pwd)/cli/index.js /usr/local/bin/talos
+
+# Add tasks
 talos add "list all running docker containers"
 talos add -t "Cleanup" "remove temp files older than 7 days"
 
 # List tasks
 talos list           # All tasks
-talos list queue     # Just queued tasks
-talos list done      # Completed tasks
+talos list queue     # Just queued
+talos list done      # Completed
 
-# Show task details
+# Manage tasks
 talos show abc123
-
-# Delete a task
 talos delete abc123
-
-# Requeue a failed task
 talos requeue abc123
 
-# View/update config
+# Config
 talos config
-talos config set pollIntervalMs 300000
-talos config set allowAllTools false
+talos config set permissions.allowAllTools false
 ```
 
 ## Configuration
@@ -98,123 +101,150 @@ Edit `config.json`:
   "tasksDir": "./tasks",
   "webPort": 3000,
   "copilotCommand": "copilot",
-  "allowAllTools": true,
-  "allowTools": [],
-  "denyTools": [],
-  "model": null
+  
+  "execution": {
+    "mode": "acp",
+    "fallbackToPrompt": true
+  },
+  
+  "permissions": {
+    "allowAllTools": true,
+    "allowAllPaths": false,
+    "allowAllUrls": false,
+    "allowTools": [],
+    "denyTools": [],
+    "allowUrls": []
+  },
+  
+  "customInstructions": {
+    "enabled": true,
+    "globalFile": null,
+    "projectFile": ".github/copilot-instructions.md"
+  },
+  
+  "templates": [
+    { "id": "review", "title": "Code Review", "prompt": "...", "icon": "🔍" }
+  ],
+  
+  "model": null,
+  "planMode": false
 }
 ```
 
-### Configuration Options
+### Execution Modes
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `pollIntervalMs` | number | 600000 | Poll interval in milliseconds (10 min) |
-| `tasksDir` | string | "./tasks" | Directory for task files |
-| `webPort` | number | 3000 | Web UI port |
-| `copilotCommand` | string | "copilot" | Copilot CLI command |
-| `allowAllTools` | boolean | true | Allow all tools without approval |
-| `allowTools` | array | [] | Specific tools to allow (e.g., `["shell(git)", "write"]`) |
-| `denyTools` | array | [] | Specific tools to deny (e.g., `["shell(rm)"]`) |
-| `model` | string | null | Model override (default: Claude Sonnet 4.5) |
+| Mode | Description |
+|------|-------------|
+| `acp` | Agent Client Protocol — streaming, interactive permissions |
+| `prompt` | Simple `-p` flag — batch execution, uses config permissions |
 
-### Tool Approval
-
-The new Copilot CLI has granular tool approval:
+### Permission Options
 
 ```json
 {
   "allowAllTools": false,
   "allowTools": ["shell(git)", "shell(npm)", "write"],
-  "denyTools": ["shell(rm)", "shell(sudo)"]
+  "denyTools": ["shell(rm)", "shell(sudo)"],
+  "allowAllPaths": false,
+  "allowAllUrls": false,
+  "allowUrls": ["github.com", "api.github.com"]
 }
 ```
 
-See [Copilot CLI docs](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) for details.
+### Task Templates
 
-## Task Format
+Pre-configured task types for quick creation:
 
-Tasks are stored as JSON files in `tasks/{queue,running,done,failed}/`:
+| Template | Prompt |
+|----------|--------|
+| 🔍 Code Review | Review code changes and identify issues |
+| 🧪 Write Tests | Write comprehensive unit tests |
+| ♻️ Refactor | Improve code readability and maintainability |
+| 📝 Document | Add documentation and comments |
+| 🐛 Fix Bug | Identify and fix the described bug |
 
-```json
-{
-  "id": "abc12345",
-  "title": "List containers",
-  "prompt": "list all running docker containers",
-  "type": "shell",
-  "workingDir": "/home/user/project",
-  "createdAt": "2026-02-10T12:00:00.000Z",
-  "result": {
-    "exitCode": 0,
-    "stdout": "...",
-    "stderr": "",
-    "durationMs": 1234,
-    "command": "copilot",
-    "args": ["-p", "list all running docker containers", "--allow-all-tools"]
-  }
-}
-```
+## API
 
-## Running as a Service (systemd)
+### REST Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/tasks` | List all tasks |
+| POST | `/api/tasks` | Create task |
+| DELETE | `/api/tasks/:id` | Delete task |
+| POST | `/api/tasks/:id/run` | Run task |
+| POST | `/api/tasks/move` | Move task between columns |
+| GET | `/api/config` | Get config |
+| PUT | `/api/config` | Update config |
+| GET | `/api/templates` | Get templates |
+| POST | `/api/stop` | Stop running task |
+| GET | `/api/status` | Server status |
+
+### WebSocket Events
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `task_started` | Server→Client | Task execution began |
+| `output_chunk` | Server→Client | Streaming text from Copilot |
+| `tool_use` | Server→Client | Tool invocation |
+| `permission_request` | Server→Client | Approval needed |
+| `permission_response` | Client→Server | User's decision |
+| `task_completed` | Server→Client | Task finished successfully |
+| `task_failed` | Server→Client | Task failed |
+| `run_task` | Client→Server | Request to run a task |
+| `stop_task` | Client→Server | Request to stop execution |
+
+## Testing
 
 ```bash
-# Create service file
+npm test  # Runs 46 tests
+```
+
+Tests cover:
+- Task file operations
+- Configuration validation
+- Command building
+- ACP message handling
+- Executor logic
+- API routes
+- CLI commands
+
+## Systemd Service
+
+```bash
 sudo tee /etc/systemd/system/talos.service << EOF
 [Unit]
-Description=Talos Task Queue Daemon
+Description=Talos Task Queue
 After=network.target
 
 [Service]
 Type=simple
 User=$USER
 WorkingDirectory=$(pwd)
-ExecStart=/usr/bin/node $(pwd)/daemon/index.js
+ExecStart=/usr/bin/node $(pwd)/server/index.js
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Enable and start
 sudo systemctl enable talos
 sudo systemctl start talos
 ```
 
-## Testing
+## Keyboard Shortcuts
 
-Run the test suite:
-
-```bash
-npm test
-# or
-node --test test/talos.test.js
-```
-
-Tests include:
-- Task file operations (create, read, move)
-- JSON schema validation
-- Config operations
-- Daemon logic (queue → running → done/failed)
-- Web API route existence
-- CLI command structure
-- Stub command execution (no actual copilot needed)
+| Key | Action |
+|-----|--------|
+| `Ctrl/Cmd + N` | New task |
+| `Escape` | Close modal |
 
 ## Copilot CLI Reference
 
-The daemon uses Copilot CLI's programmatic mode:
-
-```bash
-copilot -p "prompt" --allow-all-tools
-```
-
-Key options:
-- `-p, --prompt` — Run in programmatic mode with given prompt
-- `--allow-all-tools` — Allow all tools without approval
-- `--allow-tool 'X'` — Allow specific tool (e.g., `shell(git)`, `write`)
-- `--deny-tool 'X'` — Deny specific tool
-- `--model MODEL` — Specify model
-
-See [GitHub Copilot CLI docs](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) for full details.
+- [About GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
+- [Using GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli)
+- [Custom Instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/add-custom-instructions)
+- [ACP Server](https://docs.github.com/en/copilot/reference/acp-server)
 
 ## License
 

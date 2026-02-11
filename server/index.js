@@ -12,7 +12,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
-const { ACPClient } = require('./acp');
+const { TaskExecutor } = require('./executor');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -20,9 +20,9 @@ const WEB_DIR = path.join(__dirname, '..', 'web');
 // WebSocket clients
 const wsClients = new Set();
 
-// Currently running task
-let currentTask = null;
-let currentACP = null;
+// Task executor
+let executor = null;
+let currentTaskId = null;
 
 // ============================================
 // Config & Task Management
@@ -237,22 +237,26 @@ function sendWebSocketFrame(socket, data) {
 function handleWSMessage(socket, message) {
   console.log('[WS] Received:', message);
   
-  if (message.type === 'permission_response' && currentACP) {
-    // Forward permission response to ACP
-    currentACP.emit('permission_response', message.data);
+  if (message.type === 'permission_response' && executor) {
+    // Forward permission response to executor
+    executor.emit('permission_response', message.data);
   }
   
   if (message.type === 'run_task') {
     runTask(message.taskId);
   }
+  
+  if (message.type === 'stop_task') {
+    stopTask();
+  }
 }
 
 // ============================================
-// ACP Task Execution
+// Task Execution
 // ============================================
 
 async function runTask(taskId) {
-  if (currentTask) {
+  if (currentTaskId) {
     broadcast('error', { message: 'A task is already running' });
     return;
   }
@@ -271,113 +275,101 @@ async function runTask(taskId) {
   // Load and move to running
   const taskPath = path.join(queueDir, files[0]);
   const task = JSON.parse(fs.readFileSync(taskPath, 'utf-8'));
+  const filename = files[0];
   
-  const runningPath = path.join(tasksDir, 'running', files[0]);
+  const runningPath = path.join(tasksDir, 'running', filename);
   fs.renameSync(taskPath, runningPath);
   
-  currentTask = task;
-  task.startedAt = new Date().toISOString();
-  task.output = '';
+  currentTaskId = task.id;
   
   broadcast('task_started', { task });
   console.log(`[Task] Starting: ${task.id} - ${task.title}`);
 
-  // Create ACP client
-  currentACP = new ACPClient({
-    copilotCommand: config.copilotCommand || 'copilot',
-    permissionHandler: async (params) => {
-      // Broadcast permission request to all clients
-      broadcast('permission_request', {
-        taskId: task.id,
-        tool: params.tool,
-        args: params.args,
-        description: params.description
-      });
-      
-      // Wait for response from client (with timeout)
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          resolve({ outcome: config.allowAllTools ? 'approved' : 'cancelled' });
-        }, 30000);
-        
-        currentACP.once('permission_response', (response) => {
-          clearTimeout(timeout);
-          resolve({ outcome: response.approved ? 'approved' : 'cancelled' });
-        });
-      });
-    }
-  });
+  // Create executor
+  executor = new TaskExecutor(config);
 
   // Set up event handlers
-  currentACP.on('chunk', (text) => {
-    task.output += text;
-    broadcast('output_chunk', { taskId: task.id, text });
+  executor.on('chunk', (data) => {
+    broadcast('output_chunk', data);
   });
 
-  currentACP.on('tool_use', (tool) => {
-    broadcast('tool_use', { taskId: task.id, tool });
+  executor.on('tool_use', (data) => {
+    broadcast('tool_use', data);
   });
 
-  currentACP.on('tool_result', (result) => {
-    broadcast('tool_result', { taskId: task.id, result });
+  executor.on('tool_result', (data) => {
+    broadcast('tool_result', data);
   });
 
-  currentACP.on('permission', ({ request, decision }) => {
-    broadcast('permission_resolved', { taskId: task.id, request, decision });
+  executor.on('permission', (data) => {
+    broadcast('permission_request', data);
   });
 
-  currentACP.on('stderr', (text) => {
-    broadcast('stderr', { taskId: task.id, text });
+  executor.on('stderr', (data) => {
+    broadcast('stderr', data);
   });
 
-  currentACP.on('error', (err) => {
-    broadcast('error', { taskId: task.id, message: err.message });
+  executor.on('error', (data) => {
+    broadcast('error', data);
   });
+
+  executor.on('info', (data) => {
+    broadcast('info', data);
+  });
+
+  // Permission handler - forward to clients
+  const permissionHandler = async (params) => {
+    broadcast('permission_request', {
+      taskId: task.id,
+      tool: params.tool,
+      args: params.args,
+      description: params.description
+    });
+    
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        const autoApprove = config.permissions?.allowAllTools;
+        resolve({ outcome: autoApprove ? 'approved' : 'cancelled' });
+      }, 30000);
+      
+      const handler = (response) => {
+        clearTimeout(timeout);
+        resolve({ outcome: response.approved ? 'approved' : 'cancelled' });
+      };
+      
+      executor.once('permission_response', handler);
+    });
+  };
 
   try {
-    // Start ACP and create session
-    const workDir = task.workingDir || process.cwd();
-    await currentACP.start(workDir);
-    await currentACP.newSession(workDir);
+    await executor.execute(task, permissionHandler);
     
-    // Send the prompt
-    const result = await currentACP.prompt(task.prompt);
-    
-    // Task completed successfully
-    task.completedAt = new Date().toISOString();
-    task.result = {
-      exitCode: 0,
-      stopReason: result.stopReason,
-      output: task.output,
-      durationMs: Date.now() - new Date(task.startedAt).getTime()
-    };
-    
+    // Save and move to done
     fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
-    fs.renameSync(runningPath, path.join(tasksDir, 'done', files[0]));
+    fs.renameSync(runningPath, path.join(tasksDir, 'done', filename));
     
     broadcast('task_completed', { task });
     console.log(`[Task] Completed: ${task.id}`);
     
   } catch (err) {
-    // Task failed
-    task.completedAt = new Date().toISOString();
-    task.result = {
-      exitCode: 1,
-      error: err.message,
-      output: task.output,
-      durationMs: Date.now() - new Date(task.startedAt).getTime()
-    };
-    
+    // Save and move to failed
     fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
-    fs.renameSync(runningPath, path.join(tasksDir, 'failed', files[0]));
+    fs.renameSync(runningPath, path.join(tasksDir, 'failed', filename));
     
     broadcast('task_failed', { task, error: err.message });
     console.log(`[Task] Failed: ${task.id} - ${err.message}`);
     
   } finally {
-    await currentACP?.stop();
-    currentACP = null;
-    currentTask = null;
+    executor = null;
+    currentTaskId = null;
+  }
+}
+
+async function stopTask() {
+  if (executor) {
+    await executor.stop();
+    executor = null;
+    currentTaskId = null;
   }
 }
 
@@ -481,10 +473,20 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/status' && req.method === 'GET') {
     return jsonResponse(res, {
-      running: currentTask !== null,
-      currentTask: currentTask?.id || null,
+      running: currentTaskId !== null,
+      currentTask: currentTaskId,
       wsClients: wsClients.size
     });
+  }
+
+  if (pathname === '/api/templates' && req.method === 'GET') {
+    const config = loadConfig();
+    return jsonResponse(res, config.templates || []);
+  }
+
+  if (pathname === '/api/stop' && req.method === 'POST') {
+    await stopTask();
+    return jsonResponse(res, { stopped: true });
   }
 
   // Static files

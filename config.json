@@ -3,8 +3,61 @@
   "tasksDir": "./tasks",
   "webPort": 3000,
   "copilotCommand": "copilot",
-  "allowAllTools": true,
-  "allowTools": [],
-  "denyTools": [],
-  "model": null
+  
+  "execution": {
+    "mode": "acp",
+    "fallbackToPrompt": true
+  },
+  
+  "permissions": {
+    "allowAllTools": true,
+    "allowAllPaths": false,
+    "allowAllUrls": false,
+    "allowTools": [],
+    "denyTools": [],
+    "allowUrls": []
+  },
+  
+  "customInstructions": {
+    "enabled": true,
+    "globalFile": null,
+    "projectFile": ".github/copilot-instructions.md"
+  },
+  
+  "templates": [
+    {
+      "id": "code-review",
+      "title": "Code Review",
+      "prompt": "Review the code changes and identify any issues, bugs, or improvements",
+      "icon": "🔍"
+    },
+    {
+      "id": "write-tests",
+      "title": "Write Tests",
+      "prompt": "Write comprehensive unit tests for the code",
+      "icon": "🧪"
+    },
+    {
+      "id": "refactor",
+      "title": "Refactor",
+      "prompt": "Refactor this code to improve readability and maintainability",
+      "icon": "♻️"
+    },
+    {
+      "id": "document",
+      "title": "Document",
+      "prompt": "Add documentation and comments to the code",
+      "icon": "📝"
+    },
+    {
+      "id": "fix-bug",
+      "title": "Fix Bug",
+      "prompt": "Identify and fix the bug described below",
+      "icon": "🐛"
+    }
+  ],
+  
+  "model": null,
+  "planMode": false,
+  "reasoning": false
 }
