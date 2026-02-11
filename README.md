@@ -137,6 +137,25 @@ sudo systemctl enable talos
 sudo systemctl start talos
 ```
 
+## Testing
+
+Run the test suite:
+
+```bash
+npm test
+# or
+node --test test/talos.test.js
+```
+
+Tests include:
+- Task file operations (create, read, move)
+- JSON schema validation
+- Config operations
+- Daemon logic (queue → running → done/failed)
+- Web API route existence
+- CLI command structure
+- Stub command execution (no actual copilot needed)
+
 ## License
 
 MIT
