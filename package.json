@@ -8,9 +8,9 @@
   },
   "scripts": {
     "test": "node --test test/talos.test.js",
+    "start": "node server/index.js",
     "daemon": "node daemon/index.js",
-    "web": "node web/server.js",
-    "start": "npm run daemon & npm run web"
+    "web": "node web/server.js"
   },
   "keywords": ["copilot", "automation", "task-queue"],
   "author": "cat-battle",

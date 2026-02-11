@@ -27,32 +27,26 @@
       font-size: 24px;
       font-weight: 600;
       color: #58a6ff;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
     h1 span { color: #8b949e; font-weight: 400; }
+
+    .connection-status {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #da3633;
+    }
+
+    .connection-status.connected { background: #238636; }
 
     .header-actions {
       display: flex;
       gap: 12px;
       align-items: center;
-    }
-
-    .poll-config {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: #8b949e;
-    }
-
-    .poll-config input {
-      width: 60px;
-      padding: 4px 8px;
-      background: #21262d;
-      border: 1px solid #30363d;
-      border-radius: 4px;
-      color: #c9d1d9;
-      font-size: 13px;
     }
 
     button {
@@ -68,28 +62,34 @@
     }
 
     button:hover { background: #2ea043; }
-    button.secondary {
-      background: #21262d;
-      border: 1px solid #30363d;
-    }
+    button:disabled { background: #21262d; cursor: not-allowed; }
+    button.secondary { background: #21262d; border: 1px solid #30363d; }
     button.secondary:hover { background: #30363d; }
     button.danger { background: #da3633; }
     button.danger:hover { background: #f85149; }
+    button.run { background: #1f6feb; }
+    button.run:hover { background: #388bfd; }
+
+    .main-layout {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      height: calc(100vh - 65px);
+    }
 
     .board {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 16px;
       padding: 24px;
-      max-width: 1600px;
-      margin: 0 auto;
+      overflow-y: auto;
     }
 
     .column {
       background: #161b22;
       border-radius: 8px;
       border: 1px solid #30363d;
-      min-height: 400px;
+      display: flex;
+      flex-direction: column;
     }
 
     .column-header {
@@ -98,6 +98,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-shrink: 0;
     }
 
     .column-title {
@@ -115,9 +116,14 @@
     }
 
     .queue .dot { background: #8957e5; }
-    .running .dot { background: #d29922; }
+    .running .dot { background: #d29922; animation: pulse 1.5s infinite; }
     .done .dot { background: #238636; }
     .failed .dot { background: #da3633; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
 
     .count {
       background: #30363d;
@@ -131,6 +137,8 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      overflow-y: auto;
+      flex: 1;
     }
 
     .task-card {
@@ -142,9 +150,8 @@
       transition: border-color 0.15s;
     }
 
-    .task-card:hover {
-      border-color: #58a6ff;
-    }
+    .task-card:hover { border-color: #58a6ff; }
+    .task-card.active { border-color: #d29922; background: #2d1f00; }
 
     .task-title {
       font-weight: 500;
@@ -159,18 +166,109 @@
       gap: 12px;
     }
 
-    .task-prompt {
-      font-size: 12px;
-      color: #8b949e;
+    .task-actions {
       margin-top: 8px;
-      padding: 8px;
-      background: #0d1117;
-      border-radius: 4px;
-      font-family: monospace;
+      display: flex;
+      gap: 8px;
+    }
+
+    .task-actions button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    /* Output Panel */
+    .output-panel {
+      background: #161b22;
+      border-left: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .output-header {
+      padding: 16px;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .output-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .output-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
-      max-height: 80px;
-      overflow: hidden;
+      background: #0d1117;
+    }
+
+    .output-content .chunk { color: #c9d1d9; }
+    .output-content .tool { color: #d29922; }
+    .output-content .error { color: #f85149; }
+    .output-content .info { color: #8b949e; }
+
+    /* Permission Modal */
+    .permission-modal {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 380px;
+      background: #161b22;
+      border: 2px solid #d29922;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      z-index: 100;
+      animation: slideIn 0.2s ease;
+    }
+
+    .permission-modal.active { display: block; }
+
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .permission-header {
+      padding: 16px;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .permission-header .icon {
+      font-size: 24px;
+    }
+
+    .permission-body {
+      padding: 16px;
+    }
+
+    .permission-tool {
+      background: #0d1117;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      margin-bottom: 12px;
+      word-break: break-word;
+    }
+
+    .permission-footer {
+      padding: 16px;
+      border-top: 1px solid #30363d;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
     }
 
     /* Modal */
@@ -207,10 +305,7 @@
       align-items: center;
     }
 
-    .modal-header h2 {
-      font-size: 18px;
-      font-weight: 600;
-    }
+    .modal-header h2 { font-size: 18px; font-weight: 600; }
 
     .modal-close {
       background: none;
@@ -219,16 +314,11 @@
       font-size: 24px;
       cursor: pointer;
       padding: 0;
-      line-height: 1;
     }
 
-    .modal-body {
-      padding: 20px;
-    }
+    .modal-body { padding: 20px; }
 
-    .form-group {
-      margin-bottom: 16px;
-    }
+    .form-group { margin-bottom: 16px; }
 
     .form-group label {
       display: block;
@@ -257,8 +347,7 @@
     }
 
     .form-group input:focus,
-    .form-group textarea:focus,
-    .form-group select:focus {
+    .form-group textarea:focus {
       outline: none;
       border-color: #58a6ff;
     }
@@ -271,38 +360,6 @@
       gap: 12px;
     }
 
-    /* Task detail */
-    .result-block {
-      background: #0d1117;
-      border-radius: 6px;
-      padding: 12px;
-      font-family: monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 300px;
-      overflow-y: auto;
-      margin-top: 8px;
-    }
-
-    .result-label {
-      font-size: 12px;
-      color: #8b949e;
-      margin-top: 12px;
-      margin-bottom: 4px;
-    }
-
-    .status-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    .status-badge.success { background: #238636; }
-    .status-badge.error { background: #da3633; }
-
     .empty-state {
       text-align: center;
       padding: 40px 20px;
@@ -312,48 +369,76 @@
 </head>
 <body>
   <header>
-    <h1>🤖 Talos <span>Task Queue</span></h1>
+    <h1>
+      <span class="connection-status" id="connStatus"></span>
+      🤖 Talos
+      <span>Task Queue</span>
+    </h1>
     <div class="header-actions">
-      <div class="poll-config">
-        Poll interval:
-        <input type="number" id="pollInterval" min="1" value="10"> min
-        <button class="secondary" onclick="savePollInterval()">Save</button>
-      </div>
       <button onclick="openNewTaskModal()">+ New Task</button>
     </div>
   </header>
 
-  <div class="board">
-    <div class="column queue">
-      <div class="column-header">
-        <span class="column-title"><span class="dot"></span> Queue</span>
-        <span class="count" id="queue-count">0</span>
+  <div class="main-layout">
+    <div class="board">
+      <div class="column queue">
+        <div class="column-header">
+          <span class="column-title"><span class="dot"></span> Queue</span>
+          <span class="count" id="queue-count">0</span>
+        </div>
+        <div class="column-body" id="queue-tasks"></div>
       </div>
-      <div class="column-body" id="queue-tasks"></div>
+
+      <div class="column running">
+        <div class="column-header">
+          <span class="column-title"><span class="dot"></span> Running</span>
+          <span class="count" id="running-count">0</span>
+        </div>
+        <div class="column-body" id="running-tasks"></div>
+      </div>
+
+      <div class="column done">
+        <div class="column-header">
+          <span class="column-title"><span class="dot"></span> Done</span>
+          <span class="count" id="done-count">0</span>
+        </div>
+        <div class="column-body" id="done-tasks"></div>
+      </div>
+
+      <div class="column failed">
+        <div class="column-header">
+          <span class="column-title"><span class="dot"></span> Failed</span>
+          <span class="count" id="failed-count">0</span>
+        </div>
+        <div class="column-body" id="failed-tasks"></div>
+      </div>
     </div>
 
-    <div class="column running">
-      <div class="column-header">
-        <span class="column-title"><span class="dot"></span> Running</span>
-        <span class="count" id="running-count">0</span>
+    <div class="output-panel">
+      <div class="output-header">
+        <h2>📺 Live Output</h2>
+        <button class="secondary" onclick="clearOutput()">Clear</button>
       </div>
-      <div class="column-body" id="running-tasks"></div>
+      <div class="output-content" id="output"></div>
     </div>
+  </div>
 
-    <div class="column done">
-      <div class="column-header">
-        <span class="column-title"><span class="dot"></span> Done</span>
-        <span class="count" id="done-count">0</span>
+  <!-- Permission Request Modal -->
+  <div class="permission-modal" id="permissionModal">
+    <div class="permission-header">
+      <span class="icon">⚠️</span>
+      <div>
+        <strong>Permission Request</strong>
+        <div style="font-size: 12px; color: #8b949e;">Copilot wants to use a tool</div>
       </div>
-      <div class="column-body" id="done-tasks"></div>
     </div>
-
-    <div class="column failed">
-      <div class="column-header">
-        <span class="column-title"><span class="dot"></span> Failed</span>
-        <span class="count" id="failed-count">0</span>
-      </div>
-      <div class="column-body" id="failed-tasks"></div>
+    <div class="permission-body">
+      <div class="permission-tool" id="permissionTool"></div>
+      <div id="permissionDesc" style="font-size: 13px; color: #8b949e;"></div>
+    </div>
+    <div class="permission-footer">
+      <button class="danger" onclick="denyPermission()">Deny</button>
+      <button onclick="approvePermission()">Approve</button>
     </div>
   </div>
 
@@ -367,19 +452,11 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Title</label>
-          <input type="text" id="taskTitle" placeholder="Brief description of the task">
+          <input type="text" id="taskTitle" placeholder="Brief description">
         </div>
         <div class="form-group">
           <label>Prompt</label>
-          <textarea id="taskPrompt" placeholder="Describe what you want Copilot to do..."></textarea>
-        </div>
-        <div class="form-group">
-          <label>Type</label>
-          <select id="taskType">
-            <option value="shell">Shell Command</option>
-            <option value="gh">GitHub CLI</option>
-            <option value="git">Git</option>
-          </select>
+          <textarea id="taskPrompt" placeholder="What should Copilot do?"></textarea>
         </div>
         <div class="form-group">
           <label>Working Directory (optional)</label>
@@ -393,41 +470,146 @@
     </div>
   </div>
 
-  <!-- Task Detail Modal -->
-  <div class="modal-overlay" id="taskDetailModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 id="detailTitle">Task Details</h2>
-        <button class="modal-close" onclick="closeModal('taskDetailModal')">&times;</button>
-      </div>
-      <div class="modal-body" id="detailBody"></div>
-      <div class="modal-footer" id="detailFooter"></div>
-    </div>
-  </div>
-
   <script>
     let tasks = { queue: [], running: [], done: [], failed: [] };
+    let ws = null;
+    let pendingPermission = null;
+
+    // ============================================
+    // WebSocket Connection
+    // ============================================
+
+    function connectWebSocket() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        document.getElementById('connStatus').classList.add('connected');
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        document.getElementById('connStatus').classList.remove('connected');
+        // Reconnect after 2 seconds
+        setTimeout(connectWebSocket, 2000);
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleWSMessage(msg);
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+      };
+    }
+
+    function handleWSMessage(msg) {
+      console.log('WS:', msg.type, msg.data);
+
+      switch (msg.type) {
+        case 'task_created':
+        case 'task_deleted':
+        case 'task_moved':
+        case 'task_completed':
+        case 'task_failed':
+          fetchTasks();
+          break;
+
+        case 'task_started':
+          fetchTasks();
+          appendOutput(`\n--- Task Started: ${msg.data.task.title} ---\n`, 'info');
+          break;
+
+        case 'output_chunk':
+          appendOutput(msg.data.text, 'chunk');
+          break;
+
+        case 'tool_use':
+          appendOutput(`\n[Tool: ${msg.data.tool.name}]\n`, 'tool');
+          break;
+
+        case 'tool_result':
+          appendOutput(`[Tool Result]\n`, 'tool');
+          break;
+
+        case 'permission_request':
+          showPermissionRequest(msg.data);
+          break;
+
+        case 'permission_resolved':
+          hidePermissionRequest();
+          appendOutput(`[Permission ${msg.data.decision.outcome}]\n`, 'info');
+          break;
+
+        case 'stderr':
+          appendOutput(msg.data.text, 'error');
+          break;
+
+        case 'error':
+          appendOutput(`\nError: ${msg.data.message}\n`, 'error');
+          break;
+      }
+    }
+
+    function sendWS(type, data) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type, data }));
+      }
+    }
+
+    // ============================================
+    // Output Panel
+    // ============================================
+
+    function appendOutput(text, className = 'chunk') {
+      const output = document.getElementById('output');
+      const span = document.createElement('span');
+      span.className = className;
+      span.textContent = text;
+      output.appendChild(span);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+      document.getElementById('output').innerHTML = '';
+    }
+
+    // ============================================
+    // Permission Handling
+    // ============================================
+
+    function showPermissionRequest(data) {
+      pendingPermission = data;
+      document.getElementById('permissionTool').textContent = data.tool || 'Unknown tool';
+      document.getElementById('permissionDesc').textContent = data.description || '';
+      document.getElementById('permissionModal').classList.add('active');
+    }
+
+    function hidePermissionRequest() {
+      document.getElementById('permissionModal').classList.remove('active');
+      pendingPermission = null;
+    }
+
+    function approvePermission() {
+      sendWS('permission_response', { taskId: pendingPermission?.taskId, approved: true });
+      hidePermissionRequest();
+    }
+
+    function denyPermission() {
+      sendWS('permission_response', { taskId: pendingPermission?.taskId, approved: false });
+      hidePermissionRequest();
+    }
+
+    // ============================================
+    // Task Management
+    // ============================================
 
     async function fetchTasks() {
       const res = await fetch('/api/tasks');
       tasks = await res.json();
       renderTasks();
-    }
-
-    async function fetchConfig() {
-      const res = await fetch('/api/config');
-      const config = await res.json();
-      document.getElementById('pollInterval').value = Math.round(config.pollIntervalMs / 60000);
-    }
-
-    async function savePollInterval() {
-      const minutes = parseInt(document.getElementById('pollInterval').value) || 10;
-      await fetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pollIntervalMs: minutes * 60000 })
-      });
-      alert('Poll interval saved. Restart daemon to apply.');
     }
 
     function renderTasks() {
@@ -447,15 +629,28 @@
     }
 
     function renderTaskCard(task, status) {
-      const time = new Date(task.createdAt).toLocaleString();
+      const isRunning = status === 'running';
+      let actions = '';
+      
+      if (status === 'queue') {
+        actions = `
+          <button class="run" onclick="runTask('${task.id}'); event.stopPropagation();">▶ Run</button>
+          <button class="danger" onclick="deleteTask('${task.id}', '${status}'); event.stopPropagation();">Delete</button>
+        `;
+      } else if (status === 'done' || status === 'failed') {
+        actions = `
+          <button class="secondary" onclick="requeueTask('${task.id}', '${status}'); event.stopPropagation();">Requeue</button>
+          <button class="danger" onclick="deleteTask('${task.id}', '${status}'); event.stopPropagation();">Delete</button>
+        `;
+      }
+
       return `
-        <div class="task-card" onclick="showTaskDetail('${task.id}', '${status}')">
+        <div class="task-card ${isRunning ? 'active' : ''}" onclick="showTaskDetail('${task.id}', '${status}')">
           <div class="task-title">${escapeHtml(task.title)}</div>
           <div class="task-meta">
             <span>${task.id}</span>
-            <span>${task.type}</span>
           </div>
-          <div class="task-prompt">${escapeHtml(task.prompt)}</div>
+          ${actions ? `<div class="task-actions">${actions}</div>` : ''}
         </div>
       `;
     }
@@ -464,14 +659,52 @@
       if (!str) return '';
       return str.replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/>/g, '&gt;');
     }
+
+    async function runTask(taskId) {
+      clearOutput();
+      appendOutput('Starting task...\n', 'info');
+      await fetch(`/api/tasks/${taskId}/run`, { method: 'POST' });
+    }
+
+    async function deleteTask(taskId, status) {
+      await fetch(`/api/tasks/${taskId}?status=${status}`, { method: 'DELETE' });
+      fetchTasks();
+    }
+
+    async function requeueTask(taskId, status) {
+      await fetch('/api/tasks/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, from: status, to: 'queue' })
+      });
+      fetchTasks();
+    }
+
+    function showTaskDetail(taskId, status) {
+      const task = tasks[status].find(t => t.id === taskId);
+      if (!task) return;
+      
+      clearOutput();
+      appendOutput(`Task: ${task.title}\n`, 'info');
+      appendOutput(`ID: ${task.id}\n`, 'info');
+      appendOutput(`Prompt: ${task.prompt}\n\n`, 'info');
+      
+      if (task.result?.output) {
+        appendOutput(task.result.output, 'chunk');
+      } else if (task.output) {
+        appendOutput(task.output, 'chunk');
+      }
+    }
+
+    // ============================================
+    // Modals
+    // ============================================
 
     function openNewTaskModal() {
       document.getElementById('taskTitle').value = '';
       document.getElementById('taskPrompt').value = '';
-      document.getElementById('taskType').value = 'shell';
       document.getElementById('taskWorkDir').value = '';
       document.getElementById('newTaskModal').classList.add('active');
     }
@@ -484,7 +717,6 @@
       const task = {
         title: document.getElementById('taskTitle').value || 'Untitled',
         prompt: document.getElementById('taskPrompt').value,
-        type: document.getElementById('taskType').value,
         workingDir: document.getElementById('taskWorkDir').value || null
       };
 
@@ -495,105 +727,14 @@
       });
 
       closeModal('newTaskModal');
-      fetchTasks();
     }
 
-    function showTaskDetail(taskId, status) {
-      const task = tasks[status].find(t => t.id === taskId);
-      if (!task) return;
+    // ============================================
+    // Init
+    // ============================================
 
-      document.getElementById('detailTitle').textContent = task.title;
-      
-      let body = `
-        <div class="form-group">
-          <label>ID</label>
-          <div>${task.id}</div>
-        </div>
-        <div class="form-group">
-          <label>Type</label>
-          <div>${task.type}</div>
-        </div>
-        <div class="form-group">
-          <label>Created</label>
-          <div>${new Date(task.createdAt).toLocaleString()}</div>
-        </div>
-        <div class="form-group">
-          <label>Prompt</label>
-          <div class="result-block">${escapeHtml(task.prompt)}</div>
-        </div>
-      `;
-
-      if (task.result) {
-        body += `
-          <div class="form-group">
-            <label>Status</label>
-            <div>
-              <span class="status-badge ${task.result.exitCode === 0 ? 'success' : 'error'}">
-                Exit code: ${task.result.exitCode}
-              </span>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Duration</label>
-            <div>${task.result.durationMs ? (task.result.durationMs / 1000).toFixed(1) + 's' : 'N/A'}</div>
-          </div>
-        `;
-        
-        if (task.result.stdout) {
-          body += `
-            <div class="result-label">stdout</div>
-            <div class="result-block">${escapeHtml(task.result.stdout)}</div>
-          `;
-        }
-        
-        if (task.result.stderr) {
-          body += `
-            <div class="result-label">stderr</div>
-            <div class="result-block">${escapeHtml(task.result.stderr)}</div>
-          `;
-        }
-      }
-
-      document.getElementById('detailBody').innerHTML = body;
-
-      let footer = '';
-      if (status === 'queue') {
-        footer = `<button class="danger" onclick="deleteTask('${taskId}', '${status}')">Delete</button>`;
-      } else if (status === 'done' || status === 'failed') {
-        footer = `
-          <button class="secondary" onclick="requeueTask('${taskId}', '${status}')">Requeue</button>
-          <button class="danger" onclick="deleteTask('${taskId}', '${status}')">Delete</button>
-        `;
-      }
-      document.getElementById('detailFooter').innerHTML = footer;
-
-      document.getElementById('taskDetailModal').classList.add('active');
-    }
-
-    async function deleteTask(taskId, status) {
-      if (!confirm('Delete this task?')) return;
-      
-      await fetch(`/api/tasks/${taskId}?status=${status}`, { method: 'DELETE' });
-      closeModal('taskDetailModal');
-      fetchTasks();
-    }
-
-    async function requeueTask(taskId, status) {
-      await fetch('/api/tasks/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, from: status, to: 'queue' })
-      });
-      closeModal('taskDetailModal');
-      fetchTasks();
-    }
-
-    // Initial load
-    fetchConfig();
     fetchTasks();
-    
-    // Auto-refresh every 30 seconds
-    setInterval(fetchTasks, 30000);
+    connectWebSocket();
   </script>
 </body>
 </html>
