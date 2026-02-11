@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Talos Daemon
- * Polls task queue and executes GitHub Copilot CLI
+ * Polls task queue and executes GitHub Copilot CLI (new agent-based CLI)
+ * 
+ * Copilot CLI docs: https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli
  */
 
 const fs = require('fs');
@@ -43,6 +45,45 @@ function moveTask(taskPath, toDir) {
   return newPath;
 }
 
+/**
+ * Build copilot CLI arguments based on task and config
+ * 
+ * New Copilot CLI programmatic mode:
+ *   copilot -p "prompt" [options]
+ * 
+ * Options:
+ *   --allow-all-tools     Allow all tools without approval
+ *   --allow-tool 'X'      Allow specific tool (e.g., 'shell(git)', 'write')
+ *   --deny-tool 'X'       Deny specific tool
+ *   --model MODEL         Specify model (default: Claude Sonnet 4.5)
+ */
+function buildCopilotArgs(task, config) {
+  const args = ['-p', task.prompt];
+  
+  // Tool approval mode
+  if (config.allowAllTools) {
+    args.push('--allow-all-tools');
+  } else if (config.allowTools && config.allowTools.length > 0) {
+    for (const tool of config.allowTools) {
+      args.push('--allow-tool', tool);
+    }
+  }
+  
+  // Denied tools
+  if (config.denyTools && config.denyTools.length > 0) {
+    for (const tool of config.denyTools) {
+      args.push('--deny-tool', tool);
+    }
+  }
+  
+  // Model selection
+  if (config.model) {
+    args.push('--model', config.model);
+  }
+  
+  return args;
+}
+
 async function executeTask(taskPath, config) {
   const tasksDir = path.resolve(path.dirname(CONFIG_PATH), config.tasksDir);
   const runningDir = path.join(tasksDir, 'running');
@@ -56,19 +97,18 @@ async function executeTask(taskPath, config) {
   const task = JSON.parse(fs.readFileSync(runningPath, 'utf-8'));
   console.log(`[${new Date().toISOString()}] Running task: ${task.id} - ${task.title}`);
 
-  // Build command
-  const args = ['copilot', 'suggest', '-t', task.type || 'shell', task.prompt];
-  if (config.yoloMode) {
-    // Note: --yolo flag may vary by copilot CLI version
-    // Adjust as needed for your installation
-  }
+  // Build command args for new Copilot CLI
+  const args = buildCopilotArgs(task, config);
+  const command = config.copilotCommand || 'copilot';
+  
+  console.log(`[${new Date().toISOString()}] Executing: ${command} ${args.join(' ')}`);
 
   return new Promise((resolve) => {
     const startTime = Date.now();
-    const proc = spawn('gh', args, {
+    const proc = spawn(command, args, {
       cwd: task.workingDir || process.cwd(),
       env: { ...process.env },
-      shell: true
+      shell: false
     });
 
     let stdout = '';
@@ -76,10 +116,13 @@ async function executeTask(taskPath, config) {
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
+      // Stream output in real-time
+      process.stdout.write(data);
     });
 
     proc.stderr.on('data', (data) => {
       stderr += data.toString();
+      process.stderr.write(data);
     });
 
     proc.on('close', (code) => {
@@ -92,7 +135,9 @@ async function executeTask(taskPath, config) {
         stderr: stderr,
         startedAt: new Date(startTime).toISOString(),
         completedAt: new Date(endTime).toISOString(),
-        durationMs: endTime - startTime
+        durationMs: endTime - startTime,
+        command: command,
+        args: args
       };
 
       // Write updated task
@@ -102,7 +147,7 @@ async function executeTask(taskPath, config) {
       const destDir = code === 0 ? doneDir : failedDir;
       const finalPath = moveTask(runningPath, destDir);
       
-      console.log(`[${new Date().toISOString()}] Task ${task.id} ${code === 0 ? 'completed' : 'failed'} (exit ${code})`);
+      console.log(`\n[${new Date().toISOString()}] Task ${task.id} ${code === 0 ? 'completed' : 'failed'} (exit ${code})`);
       resolve({ task, exitCode: code, finalPath });
     });
 
@@ -113,7 +158,9 @@ async function executeTask(taskPath, config) {
         stderr: err.message,
         startedAt: new Date(startTime).toISOString(),
         completedAt: new Date().toISOString(),
-        error: err.message
+        error: err.message,
+        command: command,
+        args: args
       };
       
       fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
@@ -144,13 +191,17 @@ async function pollOnce(config) {
 }
 
 async function main() {
-  console.log('='.repeat(50));
-  console.log('  Talos Daemon Starting');
-  console.log('='.repeat(50));
+  console.log('='.repeat(60));
+  console.log('  Talos Daemon - GitHub Copilot CLI Task Queue');
+  console.log('='.repeat(60));
   
   let config = loadConfig();
-  console.log(`Poll interval: ${config.pollIntervalMs / 1000}s`);
+  console.log(`Poll interval: ${config.pollIntervalMs / 1000}s (${config.pollIntervalMs / 60000} min)`);
   console.log(`Tasks directory: ${path.resolve(path.dirname(CONFIG_PATH), config.tasksDir)}`);
+  console.log(`Copilot command: ${config.copilotCommand || 'copilot'}`);
+  console.log(`Allow all tools: ${config.allowAllTools || false}`);
+  if (config.allowTools) console.log(`Allowed tools: ${config.allowTools.join(', ')}`);
+  if (config.denyTools) console.log(`Denied tools: ${config.denyTools.join(', ')}`);
   console.log('');
 
   // Initial poll

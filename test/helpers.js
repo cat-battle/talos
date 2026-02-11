@@ -29,7 +29,10 @@ function setupTestEnv() {
     tasksDir: TASKS_DIR,
     webPort: 3999,
     copilotCommand: 'echo',  // Stub: just echo the prompt
-    yoloMode: true
+    allowAllTools: true,
+    allowTools: [],
+    denyTools: [],
+    model: null
   };
   
   fs.writeFileSync(

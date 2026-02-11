@@ -4,10 +4,26 @@ Task queue daemon for GitHub Copilot CLI automation. Named after the bronze auto
 
 ## Features
 
-- 📋 **Kanban Web UI** — Visual task management with drag-and-drop
+- 📋 **Kanban Web UI** — Visual task management
 - 💻 **CLI Interface** — Add and manage tasks from the terminal
-- ⚡ **Daemon** — Polls queue and executes tasks via `gh copilot`
+- ⚡ **Daemon** — Polls queue and executes tasks via `copilot`
 - 📁 **File-based Storage** — Tasks are JSON files, easy to inspect/backup
+
+## Requirements
+
+- Node.js 18+
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) (the new agent-based CLI)
+- GitHub CLI authenticated: `gh auth login`
+
+### Installing Copilot CLI
+
+```bash
+# Install via npm (recommended)
+npm install -g @githubnext/github-copilot-cli
+
+# Or via gh extension
+gh extension install github/gh-copilot
+```
 
 ## Installation
 
@@ -22,12 +38,6 @@ cd talos
 chmod +x cli/index.js
 ln -s $(pwd)/cli/index.js /usr/local/bin/talos
 ```
-
-## Requirements
-
-- Node.js 18+
-- GitHub CLI (`gh`) with Copilot extension
-- Authenticated: `gh auth login`
 
 ## Usage
 
@@ -75,6 +85,7 @@ talos requeue abc123
 # View/update config
 talos config
 talos config set pollIntervalMs 300000
+talos config set allowAllTools false
 ```
 
 ## Configuration
@@ -83,13 +94,43 @@ Edit `config.json`:
 
 ```json
 {
-  "pollIntervalMs": 600000,    // 10 minutes
+  "pollIntervalMs": 600000,
   "tasksDir": "./tasks",
   "webPort": 3000,
-  "copilotCommand": "gh copilot suggest",
-  "yoloMode": true
+  "copilotCommand": "copilot",
+  "allowAllTools": true,
+  "allowTools": [],
+  "denyTools": [],
+  "model": null
 }
 ```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `pollIntervalMs` | number | 600000 | Poll interval in milliseconds (10 min) |
+| `tasksDir` | string | "./tasks" | Directory for task files |
+| `webPort` | number | 3000 | Web UI port |
+| `copilotCommand` | string | "copilot" | Copilot CLI command |
+| `allowAllTools` | boolean | true | Allow all tools without approval |
+| `allowTools` | array | [] | Specific tools to allow (e.g., `["shell(git)", "write"]`) |
+| `denyTools` | array | [] | Specific tools to deny (e.g., `["shell(rm)"]`) |
+| `model` | string | null | Model override (default: Claude Sonnet 4.5) |
+
+### Tool Approval
+
+The new Copilot CLI has granular tool approval:
+
+```json
+{
+  "allowAllTools": false,
+  "allowTools": ["shell(git)", "shell(npm)", "write"],
+  "denyTools": ["shell(rm)", "shell(sudo)"]
+}
+```
+
+See [Copilot CLI docs](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) for details.
 
 ## Task Format
 
@@ -107,7 +148,9 @@ Tasks are stored as JSON files in `tasks/{queue,running,done,failed}/`:
     "exitCode": 0,
     "stdout": "...",
     "stderr": "",
-    "durationMs": 1234
+    "durationMs": 1234,
+    "command": "copilot",
+    "args": ["-p", "list all running docker containers", "--allow-all-tools"]
   }
 }
 ```
@@ -155,6 +198,23 @@ Tests include:
 - Web API route existence
 - CLI command structure
 - Stub command execution (no actual copilot needed)
+
+## Copilot CLI Reference
+
+The daemon uses Copilot CLI's programmatic mode:
+
+```bash
+copilot -p "prompt" --allow-all-tools
+```
+
+Key options:
+- `-p, --prompt` — Run in programmatic mode with given prompt
+- `--allow-all-tools` — Allow all tools without approval
+- `--allow-tool 'X'` — Allow specific tool (e.g., `shell(git)`, `write`)
+- `--deny-tool 'X'` — Deny specific tool
+- `--model MODEL` — Specify model
+
+See [GitHub Copilot CLI docs](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) for full details.
 
 ## License
 
