@@ -1,0 +1,7 @@
+{
+  "pollIntervalMs": 600000,
+  "tasksDir": "./tasks",
+  "webPort": 3000,
+  "copilotCommand": "gh copilot suggest",
+  "yoloMode": true
+}

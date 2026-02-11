@@ -1,0 +1,17 @@
+{
+  "name": "talos",
+  "version": "0.1.0",
+  "description": "Task queue daemon for GitHub Copilot CLI automation",
+  "main": "daemon/index.js",
+  "bin": {
+    "talos": "./cli/index.js"
+  },
+  "scripts": {
+    "daemon": "node daemon/index.js",
+    "web": "node web/server.js",
+    "start": "npm run daemon & npm run web"
+  },
+  "keywords": ["copilot", "automation", "task-queue"],
+  "author": "cat-battle",
+  "license": "MIT"
+}

@@ -1,0 +1,21 @@
+# Task data (don't commit actual tasks)
+tasks/queue/*.json
+tasks/running/*.json
+tasks/done/*.json
+tasks/failed/*.json
+
+# Keep directory structure
+!tasks/queue/.gitkeep
+!tasks/running/.gitkeep
+!tasks/done/.gitkeep
+!tasks/failed/.gitkeep
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

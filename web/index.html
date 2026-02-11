@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talos - Task Queue</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #58a6ff;
+    }
+
+    h1 span { color: #8b949e; font-weight: 400; }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .poll-config {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #8b949e;
+    }
+
+    .poll-config input {
+      width: 60px;
+      padding: 4px 8px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #c9d1d9;
+      font-size: 13px;
+    }
+
+    button {
+      padding: 8px 16px;
+      background: #238636;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #2ea043; }
+    button.secondary {
+      background: #21262d;
+      border: 1px solid #30363d;
+    }
+    button.secondary:hover { background: #30363d; }
+    button.danger { background: #da3633; }
+    button.danger:hover { background: #f85149; }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      padding: 24px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .column {
+      background: #161b22;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      min-height: 400px;
+    }
+
+    .column-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .column-title {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .column-title .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .queue .dot { background: #8957e5; }
+    .running .dot { background: #d29922; }
+    .done .dot { background: #238636; }
+    .failed .dot { background: #da3633; }
+
+    .count {
+      background: #30363d;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .column-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .task-card {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .task-card:hover {
+      border-color: #58a6ff;
+    }
+
+    .task-title {
+      font-weight: 500;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .task-meta {
+      font-size: 12px;
+      color: #8b949e;
+      display: flex;
+      gap: 12px;
+    }
+
+    .task-prompt {
+      font-size: 12px;
+      color: #8b949e;
+      margin-top: 8px;
+      padding: 8px;
+      background: #0d1117;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 80px;
+      overflow: hidden;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #8b949e;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: monospace;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #30363d;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* Task detail */
+    .result-block {
+      background: #0d1117;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+
+    .result-label {
+      font-size: 12px;
+      color: #8b949e;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-badge.success { background: #238636; }
+    .status-badge.error { background: #da3633; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #8b949e;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 Talos <span>Task Queue</span></h1>
+    <div class="header-actions">
+      <div class="poll-config">
+        Poll interval:
+        <input type="number" id="pollInterval" min="1" value="10"> min
+        <button class="secondary" onclick="savePollInterval()">Save</button>
+      </div>
+      <button onclick="openNewTaskModal()">+ New Task</button>
+    </div>
+  </header>
+
+  <div class="board">
+    <div class="column queue">
+      <div class="column-header">
+        <span class="column-title"><span class="dot"></span> Queue</span>
+        <span class="count" id="queue-count">0</span>
+      </div>
+      <div class="column-body" id="queue-tasks"></div>
+    </div>
+
+    <div class="column running">
+      <div class="column-header">
+        <span class="column-title"><span class="dot"></span> Running</span>
+        <span class="count" id="running-count">0</span>
+      </div>
+      <div class="column-body" id="running-tasks"></div>
+    </div>
+
+    <div class="column done">
+      <div class="column-header">
+        <span class="column-title"><span class="dot"></span> Done</span>
+        <span class="count" id="done-count">0</span>
+      </div>
+      <div class="column-body" id="done-tasks"></div>
+    </div>
+
+    <div class="column failed">
+      <div class="column-header">
+        <span class="column-title"><span class="dot"></span> Failed</span>
+        <span class="count" id="failed-count">0</span>
+      </div>
+      <div class="column-body" id="failed-tasks"></div>
+    </div>
+  </div>
+
+  <!-- New Task Modal -->
+  <div class="modal-overlay" id="newTaskModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>New Task</h2>
+        <button class="modal-close" onclick="closeModal('newTaskModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="taskTitle" placeholder="Brief description of the task">
+        </div>
+        <div class="form-group">
+          <label>Prompt</label>
+          <textarea id="taskPrompt" placeholder="Describe what you want Copilot to do..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="taskType">
+            <option value="shell">Shell Command</option>
+            <option value="gh">GitHub CLI</option>
+            <option value="git">Git</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Working Directory (optional)</label>
+          <input type="text" id="taskWorkDir" placeholder="/path/to/project">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="secondary" onclick="closeModal('newTaskModal')">Cancel</button>
+        <button onclick="createTask()">Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Detail Modal -->
+  <div class="modal-overlay" id="taskDetailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="detailTitle">Task Details</h2>
+        <button class="modal-close" onclick="closeModal('taskDetailModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-footer" id="detailFooter"></div>
+    </div>
+  </div>
+
+  <script>
+    let tasks = { queue: [], running: [], done: [], failed: [] };
+
+    async function fetchTasks() {
+      const res = await fetch('/api/tasks');
+      tasks = await res.json();
+      renderTasks();
+    }
+
+    async function fetchConfig() {
+      const res = await fetch('/api/config');
+      const config = await res.json();
+      document.getElementById('pollInterval').value = Math.round(config.pollIntervalMs / 60000);
+    }
+
+    async function savePollInterval() {
+      const minutes = parseInt(document.getElementById('pollInterval').value) || 10;
+      await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pollIntervalMs: minutes * 60000 })
+      });
+      alert('Poll interval saved. Restart daemon to apply.');
+    }
+
+    function renderTasks() {
+      for (const status of ['queue', 'running', 'done', 'failed']) {
+        const container = document.getElementById(`${status}-tasks`);
+        const count = document.getElementById(`${status}-count`);
+        const list = tasks[status] || [];
+        
+        count.textContent = list.length;
+        
+        if (list.length === 0) {
+          container.innerHTML = '<div class="empty-state">No tasks</div>';
+        } else {
+          container.innerHTML = list.map(t => renderTaskCard(t, status)).join('');
+        }
+      }
+    }
+
+    function renderTaskCard(task, status) {
+      const time = new Date(task.createdAt).toLocaleString();
+      return `
+        <div class="task-card" onclick="showTaskDetail('${task.id}', '${status}')">
+          <div class="task-title">${escapeHtml(task.title)}</div>
+          <div class="task-meta">
+            <span>${task.id}</span>
+            <span>${task.type}</span>
+          </div>
+          <div class="task-prompt">${escapeHtml(task.prompt)}</div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+    }
+
+    function openNewTaskModal() {
+      document.getElementById('taskTitle').value = '';
+      document.getElementById('taskPrompt').value = '';
+      document.getElementById('taskType').value = 'shell';
+      document.getElementById('taskWorkDir').value = '';
+      document.getElementById('newTaskModal').classList.add('active');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    async function createTask() {
+      const task = {
+        title: document.getElementById('taskTitle').value || 'Untitled',
+        prompt: document.getElementById('taskPrompt').value,
+        type: document.getElementById('taskType').value,
+        workingDir: document.getElementById('taskWorkDir').value || null
+      };
+
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task)
+      });
+
+      closeModal('newTaskModal');
+      fetchTasks();
+    }
+
+    function showTaskDetail(taskId, status) {
+      const task = tasks[status].find(t => t.id === taskId);
+      if (!task) return;
+
+      document.getElementById('detailTitle').textContent = task.title;
+      
+      let body = `
+        <div class="form-group">
+          <label>ID</label>
+          <div>${task.id}</div>
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <div>${task.type}</div>
+        </div>
+        <div class="form-group">
+          <label>Created</label>
+          <div>${new Date(task.createdAt).toLocaleString()}</div>
+        </div>
+        <div class="form-group">
+          <label>Prompt</label>
+          <div class="result-block">${escapeHtml(task.prompt)}</div>
+        </div>
+      `;
+
+      if (task.result) {
+        body += `
+          <div class="form-group">
+            <label>Status</label>
+            <div>
+              <span class="status-badge ${task.result.exitCode === 0 ? 'success' : 'error'}">
+                Exit code: ${task.result.exitCode}
+              </span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Duration</label>
+            <div>${task.result.durationMs ? (task.result.durationMs / 1000).toFixed(1) + 's' : 'N/A'}</div>
+          </div>
+        `;
+        
+        if (task.result.stdout) {
+          body += `
+            <div class="result-label">stdout</div>
+            <div class="result-block">${escapeHtml(task.result.stdout)}</div>
+          `;
+        }
+        
+        if (task.result.stderr) {
+          body += `
+            <div class="result-label">stderr</div>
+            <div class="result-block">${escapeHtml(task.result.stderr)}</div>
+          `;
+        }
+      }
+
+      document.getElementById('detailBody').innerHTML = body;
+
+      let footer = '';
+      if (status === 'queue') {
+        footer = `<button class="danger" onclick="deleteTask('${taskId}', '${status}')">Delete</button>`;
+      } else if (status === 'done' || status === 'failed') {
+        footer = `
+          <button class="secondary" onclick="requeueTask('${taskId}', '${status}')">Requeue</button>
+          <button class="danger" onclick="deleteTask('${taskId}', '${status}')">Delete</button>
+        `;
+      }
+      document.getElementById('detailFooter').innerHTML = footer;
+
+      document.getElementById('taskDetailModal').classList.add('active');
+    }
+
+    async function deleteTask(taskId, status) {
+      if (!confirm('Delete this task?')) return;
+      
+      await fetch(`/api/tasks/${taskId}?status=${status}`, { method: 'DELETE' });
+      closeModal('taskDetailModal');
+      fetchTasks();
+    }
+
+    async function requeueTask(taskId, status) {
+      await fetch('/api/tasks/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, from: status, to: 'queue' })
+      });
+      closeModal('taskDetailModal');
+      fetchTasks();
+    }
+
+    // Initial load
+    fetchConfig();
+    fetchTasks();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(fetchTasks, 30000);
+  </script>
+</body>
+</html>
