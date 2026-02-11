@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Run tests
+        run: npm test
+      
+      - name: Check server starts
+        run: |
+          node server/index.js &
+          sleep 3
+          curl -f http://localhost:3000/api/health
+          pkill -f "server/index.js" || true
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Check syntax
+        run: |
+          node --check server/index.js
+          node --check server/acp.js
+          node --check server/executor.js
+          node --check cli/index.js
