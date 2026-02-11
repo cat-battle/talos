@@ -433,6 +433,14 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/tasks' && req.method === 'POST') {
     const body = await parseBody(req);
+    
+    // Support batch creation with array
+    if (Array.isArray(body)) {
+      const tasks = body.map(t => createTask(t));
+      tasks.forEach(task => broadcast('task_created', { task }));
+      return jsonResponse(res, tasks, 201);
+    }
+    
     const task = createTask(body);
     broadcast('task_created', { task });
     return jsonResponse(res, task, 201);
@@ -487,6 +495,31 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/stop' && req.method === 'POST') {
     await stopTask();
     return jsonResponse(res, { stopped: true });
+  }
+
+  if (pathname === '/api/health' && req.method === 'GET') {
+    return jsonResponse(res, {
+      status: 'healthy',
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: require('../package.json').version
+    });
+  }
+
+  if (pathname === '/api/stats' && req.method === 'GET') {
+    const stats = {
+      queue: readTasks('queue').length,
+      running: readTasks('running').length,
+      done: readTasks('done').length,
+      failed: readTasks('failed').length
+    };
+    const doneTasks = readTasks('done');
+    const totalDuration = doneTasks.reduce((sum, t) => sum + (t.result?.durationMs || 0), 0);
+    stats.avgDurationMs = doneTasks.length > 0 ? totalDuration / doneTasks.length : 0;
+    stats.successRate = stats.done + stats.failed > 0 
+      ? stats.done / (stats.done + stats.failed) 
+      : null;
+    return jsonResponse(res, stats);
   }
 
   // Static files
