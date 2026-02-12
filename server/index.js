@@ -13,12 +13,17 @@ const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { TaskExecutor } = require('./executor');
+const { MemoryManager } = require('./memory');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const WEB_DIR = path.join(__dirname, '..', 'web');
+const MEMORY_DIR = path.join(__dirname, '..', 'memory');
 
 // WebSocket clients
 const wsClients = new Set();
+
+// Memory manager (persistent learning)
+const memory = new MemoryManager(MEMORY_DIR);
 
 // Task executor
 let executor = null;
@@ -285,8 +290,8 @@ async function runTask(taskId) {
   broadcast('task_started', { task });
   console.log(`[Task] Starting: ${task.id} - ${task.title}`);
 
-  // Create executor
-  executor = new TaskExecutor(config);
+  // Create executor with memory integration
+  executor = new TaskExecutor(config, memory);
 
   // Set up event handlers
   executor.on('chunk', (data) => {
@@ -520,6 +525,22 @@ const server = http.createServer(async (req, res) => {
       ? stats.done / (stats.done + stats.failed) 
       : null;
     return jsonResponse(res, stats);
+  }
+
+  if (pathname === '/api/memory' && req.method === 'GET') {
+    return jsonResponse(res, memory.getStats());
+  }
+
+  if (pathname === '/api/memory/search' && req.method === 'GET') {
+    const query = url.searchParams.get('q') || '';
+    const limit = parseInt(url.searchParams.get('limit')) || 10;
+    return jsonResponse(res, memory.search(query, limit));
+  }
+
+  if (pathname === '/api/memory/context' && req.method === 'POST') {
+    const body = await parseBody(req);
+    const context = memory.getContextForTask(body);
+    return jsonResponse(res, context);
   }
 
   // Static files

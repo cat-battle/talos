@@ -11,9 +11,10 @@ const { EventEmitter } = require('events');
 const { ACPClient } = require('./acp');
 
 class TaskExecutor extends EventEmitter {
-  constructor(config) {
+  constructor(config, memory = null) {
     super();
     this.config = config;
+    this.memory = memory;
     this.currentTask = null;
     this.acpClient = null;
     this.process = null;
@@ -26,6 +27,16 @@ class TaskExecutor extends EventEmitter {
     this.currentTask = task;
     task.startedAt = new Date().toISOString();
     task.output = '';
+
+    // Inject memory context into prompt
+    if (this.memory) {
+      const contextPrompt = this.memory.buildContextPrompt(task);
+      if (contextPrompt) {
+        task._originalPrompt = task.prompt;
+        task.prompt = task.prompt + contextPrompt;
+        this.emit('info', { message: 'Injected memory context into prompt' });
+      }
+    }
 
     const mode = this.config.execution?.mode || 'acp';
     const fallback = this.config.execution?.fallbackToPrompt !== false;
@@ -51,6 +62,25 @@ class TaskExecutor extends EventEmitter {
       }
       throw err;
     } finally {
+      // Record task in memory
+      if (this.memory && task.result) {
+        try {
+          // Restore original prompt for recording
+          if (task._originalPrompt) {
+            task.prompt = task._originalPrompt;
+            delete task._originalPrompt;
+          }
+          this.memory.recordTask(task, task.result);
+          
+          // Extract and save learnings
+          const learnings = this.memory.extractLearnings(task, task.result);
+          for (const learning of learnings) {
+            this.memory.addLearning(task.workingDir, learning);
+          }
+        } catch (memErr) {
+          this.emit('error', { message: `Memory recording failed: ${memErr.message}` });
+        }
+      }
       this.currentTask = null;
     }
   }
@@ -64,26 +94,40 @@ class TaskExecutor extends EventEmitter {
     this.acpClient = new ACPClient({
       copilotCommand: this.config.copilotCommand || 'copilot',
       permissionHandler: async (params) => {
-        // Check auto-approve settings
+        const tool = params.tool || 'unknown';
+        
+        // Check auto-approve settings from config
         if (this.config.permissions?.allowAllTools) {
+          this._recordToolDecision(tool, true);
           return { outcome: 'approved' };
         }
 
-        // Check allowed tools list
+        // Check allowed tools list from config
         const allowedTools = this.config.permissions?.allowTools || [];
-        if (allowedTools.some(t => params.tool?.includes(t))) {
+        if (allowedTools.some(t => tool.includes(t))) {
+          this._recordToolDecision(tool, true);
           return { outcome: 'approved' };
         }
 
-        // Check denied tools list
+        // Check denied tools list from config
         const deniedTools = this.config.permissions?.denyTools || [];
-        if (deniedTools.some(t => params.tool?.includes(t))) {
+        if (deniedTools.some(t => tool.includes(t))) {
+          this._recordToolDecision(tool, false);
           return { outcome: 'cancelled' };
+        }
+
+        // Check memory for auto-approve patterns
+        if (this.memory?.shouldAutoApprove(tool)) {
+          this.emit('info', { message: `Auto-approved ${tool} (learned pattern)` });
+          this._recordToolDecision(tool, true);
+          return { outcome: 'approved' };
         }
 
         // Ask the handler (usually forwards to UI)
         if (permissionHandler) {
-          return permissionHandler(params);
+          const result = await permissionHandler(params);
+          this._recordToolDecision(tool, result.outcome === 'approved');
+          return result;
         }
 
         return { outcome: 'cancelled' };
@@ -294,6 +338,20 @@ class TaskExecutor extends EventEmitter {
   sendPermissionResponse(approved) {
     if (this.acpClient) {
       this.acpClient.emit('permission_response', { approved });
+    }
+  }
+
+  /**
+   * Record tool approval/denial in memory
+   */
+  _recordToolDecision(tool, approved) {
+    if (this.memory) {
+      try {
+        this.memory.recordToolDecision(tool, approved);
+      } catch (err) {
+        // Non-fatal, just log
+        this.emit('error', { message: `Failed to record tool decision: ${err.message}` });
+      }
     }
   }
 }
