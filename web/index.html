@@ -49,6 +49,48 @@
       align-items: center;
     }
 
+    /* Memory Stats Bar */
+    .memory-bar {
+      background: #0d1117;
+      border-bottom: 1px solid #30363d;
+      padding: 8px 24px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .memory-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #8b949e;
+    }
+
+    .memory-stat .value {
+      color: #c9d1d9;
+      font-weight: 500;
+    }
+
+    .memory-stat.highlight .value {
+      color: #3fb950;
+    }
+
+    .auto-approve-list {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .auto-approve-tag {
+      background: #238636;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: monospace;
+    }
+
     button {
       padding: 6px 12px;
       background: #238636;
@@ -75,7 +117,7 @@
     .main-layout {
       display: grid;
       grid-template-columns: 1fr 420px;
-      height: calc(100vh - 57px);
+      height: calc(100vh - 97px);
     }
 
     @media (max-width: 1200px) {
@@ -237,6 +279,21 @@
     .output-content .error { color: #f85149; }
     .output-content .info { color: #8b949e; font-style: italic; }
     .output-content .success { color: #3fb950; }
+    .output-content .memory { color: #a371f7; }
+
+    /* Context Indicator */
+    .context-indicator {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #a371f7;
+      padding: 2px 6px;
+      background: rgba(163, 113, 247, 0.1);
+      border-radius: 4px;
+    }
+
+    .context-indicator.active { display: flex; }
 
     /* Templates */
     .templates {
@@ -276,6 +333,7 @@
     }
 
     .permission-modal.active { display: block; }
+    .permission-modal.auto-approved { border-color: #238636; }
 
     @keyframes slideIn {
       from { transform: translateY(20px); opacity: 0; }
@@ -312,6 +370,16 @@
       display: flex;
       justify-content: flex-end;
       gap: 8px;
+    }
+
+    .auto-approve-hint {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 8px;
+      padding: 6px 8px;
+      background: rgba(35, 134, 54, 0.1);
+      border-radius: 4px;
+      border-left: 2px solid #238636;
     }
 
     /* Modal */
@@ -452,6 +520,26 @@
     </div>
   </header>
 
+  <!-- Memory Stats Bar -->
+  <div class="memory-bar">
+    <div class="memory-stat">
+      🧠 <span class="value" id="memProjects">0</span> projects
+    </div>
+    <div class="memory-stat">
+      📝 <span class="value" id="memTasks">0</span> tasks learned
+    </div>
+    <div class="memory-stat highlight">
+      ✅ <span class="value" id="memSuccess">0</span> patterns
+    </div>
+    <div class="memory-stat" id="autoApproveSection" style="display: none;">
+      🔓 Auto-approve:
+      <div class="auto-approve-list" id="autoApproveList"></div>
+    </div>
+    <div class="context-indicator" id="contextIndicator">
+      🔮 Memory context injected
+    </div>
+  </div>
+
   <div class="main-layout">
     <div class="board">
       <div class="column queue">
@@ -510,6 +598,9 @@
     <div class="permission-body">
       <div class="permission-tool" id="permissionTool"></div>
       <div id="permissionDesc" style="font-size: 12px; color: #8b949e;"></div>
+      <div class="auto-approve-hint" id="autoApproveHint" style="display: none;">
+        💡 Approve 5 times to auto-approve this tool
+      </div>
     </div>
     <div class="permission-footer">
       <button class="danger" onclick="denyPermission()">Deny</button>
@@ -549,6 +640,7 @@
   <script>
     let tasks = { queue: [], running: [], done: [], failed: [] };
     let templates = [];
+    let memoryStats = {};
     let ws = null;
     let pendingPermission = null;
     let isRunning = false;
@@ -590,12 +682,15 @@
         case 'task_completed':
         case 'task_failed':
           fetchTasks();
+          fetchMemoryStats(); // Refresh memory after task changes
           if (msg.type === 'task_completed') {
             appendOutput(`\n✅ Task completed\n`, 'success');
             setRunning(false);
+            hideContextIndicator();
           } else if (msg.type === 'task_failed') {
             appendOutput(`\n❌ Task failed: ${msg.data?.error || 'Unknown error'}\n`, 'error');
             setRunning(false);
+            hideContextIndicator();
           }
           break;
 
@@ -636,7 +731,15 @@
           break;
 
         case 'info':
-          appendOutput(`ℹ ${msg.data.message}\n`, 'info');
+          // Check for memory context injection
+          if (msg.data.message.includes('memory context')) {
+            showContextIndicator();
+            appendOutput(`🔮 ${msg.data.message}\n`, 'memory');
+          } else if (msg.data.message.includes('Auto-approved')) {
+            appendOutput(`🔓 ${msg.data.message}\n`, 'memory');
+          } else {
+            appendOutput(`ℹ ${msg.data.message}\n`, 'info');
+          }
           break;
       }
     }
@@ -650,6 +753,47 @@
     function setRunning(running) {
       isRunning = running;
       document.getElementById('runningIndicator').classList.toggle('active', running);
+    }
+
+    // ============================================
+    // Memory Stats
+    // ============================================
+
+    async function fetchMemoryStats() {
+      try {
+        const res = await fetch('/api/memory');
+        memoryStats = await res.json();
+        renderMemoryStats();
+      } catch (err) {
+        console.error('Failed to fetch memory stats:', err);
+      }
+    }
+
+    function renderMemoryStats() {
+      document.getElementById('memProjects').textContent = memoryStats.projects || 0;
+      document.getElementById('memTasks').textContent = memoryStats.totalTasks || 0;
+      document.getElementById('memSuccess').textContent = memoryStats.successPatterns || 0;
+
+      const autoApprove = memoryStats.autoApprovedTools || [];
+      const section = document.getElementById('autoApproveSection');
+      const list = document.getElementById('autoApproveList');
+      
+      if (autoApprove.length > 0) {
+        section.style.display = 'flex';
+        list.innerHTML = autoApprove.map(t => 
+          `<span class="auto-approve-tag">${escapeHtml(t)}</span>`
+        ).join('');
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    function showContextIndicator() {
+      document.getElementById('contextIndicator').classList.add('active');
+    }
+
+    function hideContextIndicator() {
+      document.getElementById('contextIndicator').classList.remove('active');
     }
 
     // ============================================
@@ -675,8 +819,19 @@
 
     function showPermissionRequest(data) {
       pendingPermission = data;
-      document.getElementById('permissionTool').textContent = data.tool || 'Unknown tool';
+      const tool = data.tool || 'Unknown tool';
+      document.getElementById('permissionTool').textContent = tool;
       document.getElementById('permissionDesc').textContent = data.description || '';
+      
+      // Show hint about auto-approve
+      const hint = document.getElementById('autoApproveHint');
+      const autoApproved = memoryStats.autoApprovedTools || [];
+      if (!autoApproved.includes(tool)) {
+        hint.style.display = 'block';
+      } else {
+        hint.style.display = 'none';
+      }
+      
       document.getElementById('permissionModal').classList.add('active');
     }
 
@@ -789,6 +944,7 @@
     async function stopTask() {
       await fetch('/api/stop', { method: 'POST' });
       setRunning(false);
+      hideContextIndicator();
       appendOutput('\n⛔ Task stopped\n', 'error');
     }
 
@@ -814,6 +970,9 @@
       appendOutput(`   Created: ${new Date(task.createdAt).toLocaleString()}\n`, 'info');
       if (task.result?.durationMs) {
         appendOutput(`   Duration: ${(task.result.durationMs/1000).toFixed(1)}s\n`, 'info');
+      }
+      if (task.result?.mode) {
+        appendOutput(`   Mode: ${task.result.mode}\n`, 'info');
       }
       appendOutput(`\n📝 Prompt:\n${task.prompt}\n`, 'info');
       
@@ -876,10 +1035,12 @@
 
     fetchTasks();
     fetchTemplates();
+    fetchMemoryStats();
     connectWebSocket();
     
-    // Auto-refresh tasks every 30 seconds
+    // Auto-refresh
     setInterval(fetchTasks, 30000);
+    setInterval(fetchMemoryStats, 60000);
   </script>
 </body>
 </html>
