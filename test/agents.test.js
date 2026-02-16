@@ -117,8 +117,10 @@ describe('ClaudeCodeAgent', () => {
     });
 
     const args = agent.buildArgs({ prompt: 'test' });
-    assert.ok(args.includes('-p'));
-    assert.ok(args.includes('test'));
+    // Note: Claude Code uses stdin piping instead of -p flag
+    // So prompt is NOT in args, it's written to stdin
+    assert.ok(!args.includes('-p'), 'should not use -p flag');
+    assert.ok(!args.includes('test'), 'prompt should be piped to stdin');
     assert.ok(args.includes('--model'));
     assert.ok(args.includes('--max-turns'));
     assert.ok(args.includes('5'));
