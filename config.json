@@ -2,11 +2,27 @@
   "pollIntervalMs": 600000,
   "tasksDir": "./tasks",
   "webPort": 3000,
-  "copilotCommand": "copilot",
   
-  "execution": {
-    "mode": "acp",
-    "fallbackToPrompt": true
+  "agent": {
+    "type": "auto",
+    "preferred": ["copilot", "claude-code"]
+  },
+  
+  "copilot": {
+    "command": "copilot",
+    "execution": {
+      "mode": "acp",
+      "fallbackToPrompt": true
+    }
+  },
+  
+  "claudeCode": {
+    "command": "claude",
+    "execution": {
+      "mode": "print"
+    },
+    "outputFormat": "text",
+    "maxTurns": 10
   },
   
   "permissions": {

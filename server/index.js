@@ -12,7 +12,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
-const { TaskExecutor } = require('./executor');
+const { createAgent, detectAvailableAgents, getDefaultAgent } = require('./agents');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -20,9 +20,10 @@ const WEB_DIR = path.join(__dirname, '..', 'web');
 // WebSocket clients
 const wsClients = new Set();
 
-// Task executor
-let executor = null;
+// Current agent instance
+let currentAgent = null;
 let currentTaskId = null;
+let activeAgentId = null;
 
 // ============================================
 // Config & Task Management
@@ -237,9 +238,9 @@ function sendWebSocketFrame(socket, data) {
 function handleWSMessage(socket, message) {
   console.log('[WS] Received:', message);
   
-  if (message.type === 'permission_response' && executor) {
-    // Forward permission response to executor
-    executor.emit('permission_response', message.data);
+  if (message.type === 'permission_response' && currentAgent) {
+    // Forward permission response to agent
+    currentAgent.emit('permission_response', message.data);
   }
   
   if (message.type === 'run_task') {
@@ -285,36 +286,69 @@ async function runTask(taskId) {
   broadcast('task_started', { task });
   console.log(`[Task] Starting: ${task.id} - ${task.title}`);
 
-  // Create executor
-  executor = new TaskExecutor(config);
+  // Determine which agent to use
+  let agentId = config.agent?.type || 'auto';
+  
+  if (agentId === 'auto') {
+    agentId = await getDefaultAgent(config.agent?.preferred);
+    if (!agentId) {
+      throw new Error('No coding agent available. Install copilot or claude CLI.');
+    }
+  }
+
+  // Build agent-specific config
+  const agentConfig = {
+    permissions: config.permissions,
+    model: config.model,
+    planMode: config.planMode,
+    ...(agentId === 'copilot' ? config.copilot : {}),
+    ...(agentId === 'claude-code' ? config.claudeCode : {})
+  };
+
+  // Map legacy config fields
+  if (agentId === 'copilot' && config.copilot) {
+    agentConfig.copilotCommand = config.copilot.command;
+    agentConfig.execution = config.copilot.execution;
+  }
+  if (agentId === 'claude-code' && config.claudeCode) {
+    agentConfig.claudeCommand = config.claudeCode.command;
+    agentConfig.execution = config.claudeCode.execution;
+  }
+
+  // Create agent
+  currentAgent = createAgent(agentId, agentConfig);
+  activeAgentId = agentId;
+  
+  console.log(`[Agent] Using: ${agentId}`);
+  broadcast('info', { message: `Using agent: ${agentId}` });
 
   // Set up event handlers
-  executor.on('chunk', (data) => {
-    broadcast('output_chunk', data);
+  currentAgent.on('chunk', (data) => {
+    broadcast('output_chunk', { taskId: task.id, ...data });
   });
 
-  executor.on('tool_use', (data) => {
-    broadcast('tool_use', data);
+  currentAgent.on('tool_use', (data) => {
+    broadcast('tool_use', { taskId: task.id, ...data });
   });
 
-  executor.on('tool_result', (data) => {
-    broadcast('tool_result', data);
+  currentAgent.on('tool_result', (data) => {
+    broadcast('tool_result', { taskId: task.id, ...data });
   });
 
-  executor.on('permission', (data) => {
-    broadcast('permission_request', data);
+  currentAgent.on('permission', (data) => {
+    broadcast('permission_request', { taskId: task.id, ...data });
   });
 
-  executor.on('stderr', (data) => {
-    broadcast('stderr', data);
+  currentAgent.on('stderr', (data) => {
+    broadcast('stderr', { taskId: task.id, ...data });
   });
 
-  executor.on('error', (data) => {
-    broadcast('error', data);
+  currentAgent.on('error', (data) => {
+    broadcast('error', { taskId: task.id, ...data });
   });
 
-  executor.on('info', (data) => {
-    broadcast('info', data);
+  currentAgent.on('info', (data) => {
+    broadcast('info', { taskId: task.id, ...data });
   });
 
   // Permission handler - forward to clients
@@ -337,21 +371,31 @@ async function runTask(taskId) {
         resolve({ outcome: response.approved ? 'approved' : 'cancelled' });
       };
       
-      executor.once('permission_response', handler);
+      currentAgent.once('permission_response', handler);
     });
   };
 
   try {
-    await executor.execute(task, permissionHandler);
+    const result = await currentAgent.execute(task, { permissionHandler });
+    
+    // Store result in task
+    task.result = result;
     
     // Save and move to done
     fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
     fs.renameSync(runningPath, path.join(tasksDir, 'done', filename));
     
     broadcast('task_completed', { task });
-    console.log(`[Task] Completed: ${task.id}`);
+    console.log(`[Task] Completed: ${task.id} (agent: ${agentId})`);
     
   } catch (err) {
+    // Store error in task
+    task.result = {
+      exitCode: 1,
+      error: err.message,
+      agent: agentId
+    };
+    
     // Save and move to failed
     fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
     fs.renameSync(runningPath, path.join(tasksDir, 'failed', filename));
@@ -360,16 +404,18 @@ async function runTask(taskId) {
     console.log(`[Task] Failed: ${task.id} - ${err.message}`);
     
   } finally {
-    executor = null;
+    currentAgent = null;
     currentTaskId = null;
+    activeAgentId = null;
   }
 }
 
 async function stopTask() {
-  if (executor) {
-    await executor.stop();
-    executor = null;
+  if (currentAgent) {
+    await currentAgent.stop();
+    currentAgent = null;
     currentTaskId = null;
+    activeAgentId = null;
   }
 }
 
@@ -483,7 +529,18 @@ const server = http.createServer(async (req, res) => {
     return jsonResponse(res, {
       running: currentTaskId !== null,
       currentTask: currentTaskId,
+      activeAgent: activeAgentId,
       wsClients: wsClients.size
+    });
+  }
+
+  if (pathname === '/api/agents' && req.method === 'GET') {
+    const agents = await detectAvailableAgents();
+    const config = loadConfig();
+    return jsonResponse(res, {
+      configured: config.agent?.type || 'auto',
+      preferred: config.agent?.preferred || ['copilot', 'claude-code'],
+      available: agents
     });
   }
 
