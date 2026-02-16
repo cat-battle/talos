@@ -1,14 +1,22 @@
 # Talos Backlog
 
-## In Progress (feature/memory-layer)
+## In Progress
 
-### Memory & Learning System
-- [ ] `memory/` folder structure per project
-- [ ] Post-task extraction: capture key decisions/patterns
-- [ ] Pre-task injection: include relevant memory as context
+### Agent Abstraction (feature/agent-abstraction)
+- [x] Base agent interface
+- [x] Copilot CLI adapter
+- [x] Claude Code adapter
+- [x] Agent auto-detection
+- [x] "Implement Feature" template
+- [ ] Test end-to-end with Claude Code
+
+### Memory & Learning System (feature/memory-layer)
+- [x] `memory/` folder structure per project
+- [x] Post-task extraction: capture key decisions/patterns
+- [x] Pre-task injection: include relevant memory as context
 - [ ] Semantic search over past task outputs
 - [ ] Custom instructions evolution (auto-update copilot-instructions.md)
-- [ ] Pattern tracking (tools that worked/failed, timing estimates)
+- [x] Pattern tracking (tools that worked/failed, timing estimates)
 
 ## Backlog
 
@@ -19,6 +27,7 @@
 - [ ] Batch execution — run multiple tasks sequentially
 
 ### UI Enhancements
+- [ ] Working directory autocomplete (browse server filesystem)
 - [ ] Plan mode toggle in UI
 - [ ] Output search/filter
 - [ ] Quick-add in header (no modal)
