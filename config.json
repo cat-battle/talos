@@ -42,6 +42,12 @@
   
   "templates": [
     {
+      "id": "implement-feature",
+      "title": "Implement Feature",
+      "prompt": "Implement this feature from scratch. Plan your approach first, then create the necessary files and write clean, idiomatic code.\n\n",
+      "icon": "🚀"
+    },
+    {
       "id": "code-review",
       "title": "Code Review",
       "prompt": "Review the code changes and identify any issues, bugs, or improvements",
