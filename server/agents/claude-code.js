@@ -34,20 +34,46 @@ class ClaudeCodeAgent extends BaseAgent {
     };
   }
 
-  static async isAvailable() {
+  static async isAvailable(config = {}) {
+    const command = config.command || config.claudeCommand || 'claude';
     try {
-      execSync('which claude', { stdio: 'ignore' });
+      // Try configured command directly
+      execSync(`${command} --version`, { stdio: 'ignore' });
       return true;
     } catch {
+      // Fallback: check common paths
+      const commonPaths = [
+        'claude',
+        '/usr/local/bin/claude',
+        '/usr/bin/claude',
+        `${process.env.HOME}/.local/bin/claude`
+      ];
+      for (const path of commonPaths) {
+        try {
+          execSync(`${path} --version`, { stdio: 'ignore' });
+          return true;
+        } catch {}
+      }
       return false;
     }
   }
 
-  static async getVersion() {
+  static async getVersion(config = {}) {
+    const command = config.command || config.claudeCommand || 'claude';
     try {
-      const version = execSync('claude --version', { encoding: 'utf-8' }).trim();
+      const version = execSync(`${command} --version`, { encoding: 'utf-8' }).trim();
       return version;
     } catch {
+      // Fallback: check common paths
+      const commonPaths = [
+        'claude',
+        `${process.env.HOME}/.local/bin/claude`
+      ];
+      for (const path of commonPaths) {
+        try {
+          return execSync(`${path} --version`, { encoding: 'utf-8' }).trim();
+        } catch {}
+      }
       return 'unknown';
     }
   }

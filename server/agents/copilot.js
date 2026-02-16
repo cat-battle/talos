@@ -34,20 +34,44 @@ class CopilotAgent extends BaseAgent {
     };
   }
 
-  static async isAvailable() {
+  static async isAvailable(config = {}) {
+    const command = config.command || config.copilotCommand || 'copilot';
     try {
-      execSync('which copilot', { stdio: 'ignore' });
+      execSync(`${command} --version`, { stdio: 'ignore' });
       return true;
     } catch {
+      // Fallback: check common paths
+      const commonPaths = [
+        'copilot',
+        '/usr/local/bin/copilot',
+        '/usr/bin/copilot',
+        `${process.env.HOME}/.local/bin/copilot`
+      ];
+      for (const path of commonPaths) {
+        try {
+          execSync(`${path} --version`, { stdio: 'ignore' });
+          return true;
+        } catch {}
+      }
       return false;
     }
   }
 
-  static async getVersion() {
+  static async getVersion(config = {}) {
+    const command = config.command || config.copilotCommand || 'copilot';
     try {
-      const version = execSync('copilot --version', { encoding: 'utf-8' }).trim();
+      const version = execSync(`${command} --version`, { encoding: 'utf-8' }).trim();
       return version;
     } catch {
+      const commonPaths = [
+        'copilot',
+        `${process.env.HOME}/.local/bin/copilot`
+      ];
+      for (const path of commonPaths) {
+        try {
+          return execSync(`${path} --version`, { encoding: 'utf-8' }).trim();
+        } catch {}
+      }
       return 'unknown';
     }
   }
