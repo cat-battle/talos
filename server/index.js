@@ -262,6 +262,9 @@ async function runTask(taskId) {
     return;
   }
 
+  // Lock immediately to prevent race conditions
+  currentTaskId = taskId;
+
   const config = loadConfig();
   const tasksDir = getTasksDir();
   
@@ -269,6 +272,7 @@ async function runTask(taskId) {
   const queueDir = path.join(tasksDir, 'queue');
   const files = fs.readdirSync(queueDir).filter(f => f.startsWith(taskId));
   if (files.length === 0) {
+    currentTaskId = null; // Release lock
     broadcast('error', { message: 'Task not found in queue' });
     return;
   }
@@ -280,8 +284,6 @@ async function runTask(taskId) {
   
   const runningPath = path.join(tasksDir, 'running', filename);
   fs.renameSync(taskPath, runningPath);
-  
-  currentTaskId = task.id;
   
   broadcast('task_started', { task });
   console.log(`[Task] Starting: ${task.id} - ${task.title}`);
