@@ -2,7 +2,7 @@
  * Claude Code Agent Adapter
  * 
  * Adapter for Anthropic's Claude Code CLI.
- * Supports both interactive PTY mode and print mode (-p).
+ * Uses stdin piping instead of -p flag (which hangs in non-TTY environments).
  */
 
 const { spawn, execSync } = require('child_process');
@@ -85,13 +85,13 @@ class ClaudeCodeAgent extends BaseAgent {
 
     this.emit('started', { task });
 
-    const mode = this.config.execution?.mode || 'print';
+    const mode = this.config.execution?.mode || 'pipe';
 
     try {
       if (mode === 'dangerously-skip-permissions') {
-        return await this._executeSkipPermissions(task);
+        return await this._executePipe(task, true);
       } else {
-        return await this._executePrint(task);
+        return await this._executePipe(task, false);
       }
     } finally {
       this.running = false;
@@ -99,22 +99,27 @@ class ClaudeCodeAgent extends BaseAgent {
   }
 
   /**
-   * Execute using print mode (-p flag)
-   * Non-interactive, outputs result and exits
+   * Execute by piping prompt to stdin
+   * Works around -p flag hanging in non-TTY environments
    */
-  async _executePrint(task) {
+  async _executePipe(task, skipPermissions = false) {
     const workDir = task.workingDir || process.cwd();
     const command = this.config.claudeCommand || 'claude';
-    const args = this.buildArgs(task);
+    const args = this.buildArgs(task, skipPermissions);
 
-    this.info(`Executing: ${command} ${args.join(' ')}`);
+    this.info(`Executing: echo "..." | ${command} ${args.join(' ')}`);
 
     return new Promise((resolve, reject) => {
       this.process = spawn(command, args, {
         cwd: workDir,
         env: { ...process.env },
-        shell: false
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe']
       });
+
+      // Write prompt to stdin and close it
+      this.process.stdin.write(task.prompt);
+      this.process.stdin.end();
 
       this.process.stdout.on('data', (data) => {
         const text = data.toString();
@@ -160,70 +165,14 @@ class ClaudeCodeAgent extends BaseAgent {
     });
   }
 
-  /**
-   * Execute with --dangerously-skip-permissions flag
-   * Skips all permission prompts (use with caution)
-   */
-  async _executeSkipPermissions(task) {
-    const workDir = task.workingDir || process.cwd();
-    const command = this.config.claudeCommand || 'claude';
-    const args = [...this.buildArgs(task), '--dangerously-skip-permissions'];
+  buildArgs(task, skipPermissions = false) {
+    // No -p flag - we pipe to stdin instead
+    const args = [];
 
-    this.info(`Executing (skip permissions): ${command} ${args.join(' ')}`);
-
-    return new Promise((resolve, reject) => {
-      this.process = spawn(command, args, {
-        cwd: workDir,
-        env: { ...process.env },
-        shell: false
-      });
-
-      this.process.stdout.on('data', (data) => {
-        const text = data.toString();
-        this.output += text;
-        this.emit('chunk', { text });
-      });
-
-      this.process.stderr.on('data', (data) => {
-        const text = data.toString();
-        this.output += text;
-        this.emit('stderr', { text });
-      });
-
-      this.process.on('error', (err) => {
-        const result = {
-          exitCode: -1,
-          output: this.output,
-          error: err.message,
-          durationMs: Date.now() - this.startTime,
-          agent: ClaudeCodeAgent.id
-        };
-        this.emit('failed', { error: err.message });
-        reject(err);
-      });
-
-      this.process.on('close', (code) => {
-        const result = {
-          exitCode: code,
-          output: this.output,
-          durationMs: Date.now() - this.startTime,
-          agent: ClaudeCodeAgent.id
-        };
-
-        if (code === 0) {
-          this.emit('completed', { result });
-          resolve(result);
-        } else {
-          result.error = `Process exited with code ${code}`;
-          this.emit('failed', { error: result.error });
-          reject(new Error(result.error));
-        }
-      });
-    });
-  }
-
-  buildArgs(task) {
-    const args = ['-p', task.prompt];
+    // Skip permissions if requested
+    if (skipPermissions) {
+      args.push('--dangerously-skip-permissions');
+    }
 
     // Output format
     if (this.config.outputFormat) {
