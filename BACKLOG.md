@@ -13,6 +13,8 @@
 ## Backlog
 
 ### Task Management
+- [ ] "Create Plan" template — outputs structured markdown plan
+- [ ] "Execute Plan" template — implements an existing plan
 - [ ] Task chaining — reference outputs of previous tasks
 - [ ] Session resume — use Copilot's `--resume` flag
 - [ ] Task dependencies — define prerequisite tasks
