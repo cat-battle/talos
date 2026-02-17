@@ -2,14 +2,6 @@
 
 ## In Progress
 
-### Agent Abstraction (feature/agent-abstraction)
-- [x] Base agent interface
-- [x] Copilot CLI adapter
-- [x] Claude Code adapter
-- [x] Agent auto-detection
-- [x] "Implement Feature" template
-- [ ] Test end-to-end with Claude Code
-
 ### Memory & Learning System (feature/memory-layer)
 - [x] `memory/` folder structure per project
 - [x] Post-task extraction: capture key decisions/patterns
@@ -27,6 +19,7 @@
 - [ ] Batch execution — run multiple tasks sequentially
 
 ### UI Enhancements
+- [ ] WebSocket real-time updates (no manual refresh needed)
 - [ ] Working directory autocomplete (browse server filesystem)
 - [ ] Plan mode toggle in UI
 - [ ] Output search/filter
@@ -44,8 +37,18 @@
 - [ ] Project profiles (different configs per repo)
 - [ ] Task templates from file (load from .github/talos/)
 
-## Completed (v0.1.0)
+## Completed
 
+### v0.1.1 (2026-02-16)
+- [x] Agent abstraction layer (BaseAgent interface)
+- [x] CopilotAgent and ClaudeCodeAgent adapters  
+- [x] Agent auto-detection and selection
+- [x] Claude Code stdin pipe fix (resolve -p hanging)
+- [x] /api/agents endpoint
+- [x] End-to-end testing with both agents
+- [x] 61 tests passing
+
+### v0.1.0
 - [x] Kanban web UI with real-time streaming
 - [x] ACP integration with fallback to prompt mode
 - [x] Interactive permission prompts
