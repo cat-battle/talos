@@ -44,7 +44,7 @@
     {
       "id": "implement-feature",
       "title": "Implement Feature",
-      "prompt": "Implement this feature from scratch. Plan your approach first, then create the necessary files and write clean, idiomatic code.\n\n",
+      "prompt": "Implement this feature from scratch. Create the necessary files and write clean, idiomatic code. Work through the implementation step-by-step without stopping.\n\n",
       "icon": "🚀"
     },
     {
